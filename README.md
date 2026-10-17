@@ -97,3 +97,23 @@ After adding logs, regenerate `logs/slurm/INDEX.md` if you want the summary up t
 
 Shared code: `bit_diffusion_common.py` (noise schedule, q-sampling, losses),
 `qwen_lora_encoder.py` (LoRA VLM encoder; prompts/resolution per preset), `goals.py`.
+
+---
+
+## Citation
+
+
+```bibtex
+@inproceedings{kim2027intent,
+    title={Intent Makes the Difference: Intention Diffusion for Action Anticipation},
+    author={Kim, Seulgi and Prabhushankar, Mohit and AlRegib, Ghassan},
+    booktitle={IEEE/CVF Winter Conference on Applications of Computer Vision},
+    year={2027}
+}
+```
+
+
+
+
+## Acknowledgement
+This codebase is adapted from the  **[GTDA framework](https://github.com/olga-zats/GTDA)**. We sincerely thank the authors for open-sourcing their code.
