@@ -7,7 +7,7 @@
     <a href='https://alregib.ece.gatech.edu/' target='_blank'>Ghassan AlRegib</a>
 </div>
 <div>
-    Georgia Institute of Technology (OLIVES Lab)
+    Georgia Institute of Technology (<a href='https://alregib.ece.gatech.edu/' target='_blank'>OLIVES Lab</a>)
 </div>
 
 <div align="center">
