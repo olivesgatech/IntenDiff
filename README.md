@@ -1,5 +1,36 @@
-# IntenDiff
-Intent Makes the Difference: Intention Diffusion for Action Anticipation (WACV 2027)
+<div align="center">
+
+<h1>Intent Makes the Difference: Intention Diffusion for Action Anticipation</h1>
+
+<div>
+    <a href='https://skvictoria.github.io' target='_blank'>Seulgi Kim</a>&emsp;, Mohit Prabhushankar,
+    <a href='https://alregib.ece.gatech.edu/' target='_blank'>Ghassan AlRegib</a>
+</div>
+<div>
+    Georgia Institute of Technology (OLIVES Lab)
+</div>
+
+<div align="center">
+    <h3>
+        <b>Published at WACV 2027</b>
+    </h3>
+    <!-- <p>
+        [<a href="https://arxiv.org/abs/2605.01967" target='_blank'><b>Read the Paper Here</b></a>]
+    </p> -->
+</div>
+
+<div style="text-align:center">
+<img src="imgs/intro_figure_horizantal.jpg" width="95%" height="100%">
+</div>
+
+---
+
+</div>
+
+**Abstract**
+
+Deploying multimodal models in real-world scenarios requires generalization to new environments where recording conditions differ from training, a challenge known as multimodal domain generalization (MMDG). Standard architectures employ separate encoders for each modality and a fusion module, training the system end-to-end by optimizing on the fused features. In this paper, we identify that such joint optimization causes encoders to exploit cross-modal co-occurrences, statistical relationships between modalities that arise from source-specific recording conditions, rather than learning domain-invariant features. We term this failure mode Fusion Overfitting. To address this, we propose Modality-Entropy Regularization for Domain Generalization (MER-DG), which maximizes the entropy of each encoder's feature distribution to preserve feature diversity. MER-DG is architecture-agnostic and integrates into existing multimodal frameworks as an additive loss term. Extensive experiments on EPIC-Kitchens and HAC benchmarks demonstrate average improvements of approximately 5% over standard fusion and approximately 2% over state-of-the-art methods.
+
 
 ## Folder structure
 
