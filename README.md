@@ -60,10 +60,15 @@ causdiff-main/
 ```
 
 ## Data
+- Breakfast: Download ground-truth labels from the original dataset sources and place them under `datasets/breakfast/groundTruth/`
 
-`datasets/*/groundTruth/` is not tracked. Download the Breakfast / 50Salads ground-truth
-labels from the original dataset sources and place them under
-`datasets/breakfast/groundTruth/` and `datasets/50salads/groundTruth/`.
+- EGTEA+: Download ground-truth labels from the original dataset sources and place them under `datasets/egtea/groundTruth/`
+
+- UTKinects: Download ground-truth labels from the original dataset sources and place them under `datasets/utkinects/groundTruth/`
+
+- NTURGBD: Download ground-truth labels from the original dataset sources and place them under `datasets/nturgbd/groundTruth/`
+
+- DARai: Download ground-truth labels from here (https://ieee-dataport.org/open-access/darai-daily-activity-recordings-ai-and-ml-applications) and place them under `datasets/darai/groundTruth/`
 
 ## Running
 
