@@ -46,17 +46,22 @@ After adding logs, regenerate `logs/slurm/INDEX.md` if you want the summary up t
 
 ### Variants and datasets
 
-`src/main_causal_hierarchical.py` picks the trainer and data loader by flag:
+`src/main_causal_hierarchical.py` picks the model and data loader by flag:
 
-| `--variant` | trainer → VLM |
-|---|---|
-| `base` | `trainers_causal_hierarchical` → Qwen2-VL-7B online encoder |
-| `projector` | `trainers_causal_hierarchical_projector` → Qwen2-VL-7B + projector |
-| `onlylora` | `trainers_causal_hierarchical_onlylora` → Qwen2-VL-2B, LoRA |
-| `onlylora_7b` | `trainers_causal_hierarchical_onlylora_7b` → Qwen2-VL-7B, LoRA (`_onlyvlm`) |
-| `onlylora_25b` | `trainers_causal_hierarchical_onlylora_25b` → **Qwen2.5-VL-3B**, LoRA |
-| `onlylora_7b_nturgbd` | `trainers_causal_hierarchical_onlylora_7b_nturgbd` → Qwen2.5-VL-7B, LoRA |
+| `--variant` | VLM encoder | code path |
+|---|---|---|
+| `base` | Qwen2-VL-7B (online encoder) | `trainers_causal_hierarchical` → `bit_diffusion_causal_hierarchical_qwen` |
+| `projector` | Qwen2-VL-7B, LoRA + trainable mm-projector | same, with `projector=True` |
+| `lora_qwen2vl_2b` | Qwen2-VL-2B, LoRA | `trainers_causal_hierarchical_onlylora` → `bit_diffusion_causal_hierarchical_qwen_onlylora` |
+| `lora_qwen2vl_7b` | Qwen2-VL-7B, LoRA, alpha-gated goal fusion | `trainers_causal_hierarchical_lora` → `bit_diffusion_causal_hierarchical_qwen_lora` |
+| `lora_qwen25vl_3b` | Qwen2.5-VL-3B, LoRA | same, `vlm='qwen25vl_3b'` |
+| `lora_qwen25vl_7b` | Qwen2.5-VL-7B, LoRA | same, `vlm='qwen25vl_7b'` |
 
-`--dataset`: `darai_l3`, `darai_l2`, `utkinects`, `nturgbd`, `breakfast`, `50salads`.
-`--num_samples` defaults to 1 for `base`/`projector` and 5 otherwise.
-`--ds` is unchanged and only affects the experiment directory name.
+- `--dataset`: `darai_l3`, `darai_l2`, `utkinects`, `nturgbd`, `breakfast`, `50salads`.
+- `--goal_set`: global-goal texts (`src/goals.py`). Defaults to the one matching `--dataset`;
+  set it explicitly to override (e.g. `egtea`).
+- `--num_samples` defaults to 1 for `base`/`projector` and 5 otherwise.
+- `--ds` is unchanged and only affects the experiment directory name.
+
+Shared code: `bit_diffusion_common.py` (noise schedule, q-sampling, losses),
+`qwen_lora_encoder.py` (LoRA VLM encoder; prompts/resolution per preset), `goals.py`.

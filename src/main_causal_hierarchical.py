@@ -7,16 +7,17 @@ import pprint
 import numpy as np
 import torch
 
+from goals import GOAL_SETS, DATASET_GOAL_SET
 
-# --variant -> (trainer module, uses tensorboard writer, default --num_samples)
-# Replaces the old main-causal_hierarchical[_*].py copies, which differed only in these.
+
+# --variant -> (trainer module, uses tensorboard writer, default --num_samples, GaussianBitDiffusion kwargs)
 VARIANTS = {
-    'base':                ('trainers_causal_hierarchical',                    True,  1),
-    'projector':           ('trainers_causal_hierarchical_projector',          True,  1),
-    'onlylora':            ('trainers_causal_hierarchical_onlylora',           False, 5),
-    'onlylora_25b':        ('trainers_causal_hierarchical_onlylora_25b',       False, 5),
-    'onlylora_7b':         ('trainers_causal_hierarchical_onlylora_7b',        False, 5),
-    'onlylora_7b_nturgbd': ('trainers_causal_hierarchical_onlylora_7b_nturgbd', False, 5),
+    'base':             ('trainers_causal_hierarchical',          True,  1, {}),
+    'projector':        ('trainers_causal_hierarchical',          True,  1, {'projector': True}),
+    'lora_qwen2vl_2b':  ('trainers_causal_hierarchical_onlylora', False, 5, {}),
+    'lora_qwen2vl_7b':  ('trainers_causal_hierarchical_lora',     False, 5, {'vlm': 'qwen2vl_7b'}),
+    'lora_qwen25vl_3b': ('trainers_causal_hierarchical_lora',     False, 5, {'vlm': 'qwen25vl_3b'}),
+    'lora_qwen25vl_7b': ('trainers_causal_hierarchical_lora',     False, 5, {'vlm': 'qwen25vl_7b'}),
 }
 
 # --dataset -> batch generator module (all expose BatchGeneratorTCN)
@@ -39,6 +40,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--variant', default='base', choices=sorted(VARIANTS))
 parser.add_argument('--dataset', default='darai_l3', choices=sorted(DATASETS),
                     help='which batch generator to use (--ds only names the experiment dir)')
+parser.add_argument('--goal_set', default=None, choices=sorted(GOAL_SETS),
+                    help='global-goal texts; defaults to the one matching --dataset')
 
 # paths
 parser.add_argument('--gt_path')
@@ -108,9 +111,12 @@ parser.add_argument('--date')
 args = parser.parse_args()
 assert args.obs_stages + args.ant_stages == args.num_stages
 
-trainer_module, use_tensorboard, default_num_samples = VARIANTS[args.variant]
+trainer_module, use_tensorboard, default_num_samples, diffusion_kwargs = VARIANTS[args.variant]
 if args.num_samples is None:
     args.num_samples = default_num_samples
+if args.goal_set is None:
+    args.goal_set = DATASET_GOAL_SET[args.dataset]
+args.diffusion_kwargs = dict(diffusion_kwargs, goal_set=args.goal_set)
 
 if args.variant == 'projector':
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -129,7 +135,7 @@ BatchGeneratorTCN = importlib.import_module(DATASETS[args.dataset]).BatchGenerat
 # Log arguments
 arguments = ""
 print("*-----------------------------*")
-for arg in ["variant", "dataset", "model", "layer_type", "bz", "num_stages", "obs_stages", "ant_stages",
+for arg in ["variant", "dataset", "goal_set", "model", "layer_type", "bz", "num_stages", "obs_stages", "ant_stages",
             "kernel_size", "num_layers", "lr", "ds", "sample_rate", "use_features",
             "channel_dropout_prob", "split", "num_samples"]:
     print("   ", arg, " = ", str(getattr(args, arg)))

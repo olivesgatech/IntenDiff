@@ -12,12 +12,7 @@ from collections import defaultdict
 # models
 from models import *
 from models_bit_diff_causal_hierarchical import BitDiffPredictorTCN
-#from bit_diffusion_causal_hierarchical_globalgoal import GaussianBitDiffusion
 from bit_diffusion_causal_hierarchical_qwen_onlylora import GaussianBitDiffusion
-#from bit_diffusion_causal_hierarchical_qwen_onlylora_7b import GaussianBitDiffusion
-#from bit_diffusion_causal_hierarchical_qwen import GaussianBitDiffusion
-#from bit_diffusion_causal_hierarchical_clip import GaussianBitDiffusion
-#from bit_diffusion_causal_hierarchical_minilm import GaussianBitDiffusion
 from ema import *
 
 # utils
@@ -68,6 +63,7 @@ class TrainerTCN:
                 ddim_timesteps=args.num_infr_diff_timesteps,
                 objective=args.diff_obj,
                 loss_type=args.diff_loss_type,
+                **args.diffusion_kwargs,
             )
 
 
