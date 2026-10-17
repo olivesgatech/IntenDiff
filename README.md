@@ -3,7 +3,7 @@
 <h1>Intent Makes the Difference: Intention Diffusion for Action Anticipation</h1>
 
 <div>
-    <a href='https://skvictoria.github.io' target='_blank'>Seulgi Kim</a>&emsp;, Mohit Prabhushankar,
+    <a href='https://skvictoria.github.io' target='_blank'>Seulgi Kim</a>, Mohit Prabhushankar,
     <a href='https://alregib.ece.gatech.edu/' target='_blank'>Ghassan AlRegib</a>
 </div>
 <div>
@@ -20,7 +20,7 @@
 </div>
 
 <div style="text-align:center">
-<img src="imgs/intro_figure_horizantal.jpg" width="95%" height="100%">
+<img src="imgs/figure1 (6).pdf" width="95%" height="100%">
 </div>
 
 ---
