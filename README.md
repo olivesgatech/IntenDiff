@@ -20,7 +20,7 @@
 </div>
 
 <div style="text-align:center">
-<img src="imgs/figure1.pdf" width="95%" height="100%">
+<img src="imgs/intendiff-figure1.png" width="95%" height="100%">
 </div>
 
 ---
@@ -29,7 +29,8 @@
 
 **Abstract**
 
-Deploying multimodal models in real-world scenarios requires generalization to new environments where recording conditions differ from training, a challenge known as multimodal domain generalization (MMDG). Standard architectures employ separate encoders for each modality and a fusion module, training the system end-to-end by optimizing on the fused features. In this paper, we identify that such joint optimization causes encoders to exploit cross-modal co-occurrences, statistical relationships between modalities that arise from source-specific recording conditions, rather than learning domain-invariant features. We term this failure mode Fusion Overfitting. To address this, we propose Modality-Entropy Regularization for Domain Generalization (MER-DG), which maximizes the entropy of each encoder's feature distribution to preserve feature diversity. MER-DG is architecture-agnostic and integrates into existing multimodal frameworks as an additive loss term. Extensive experiments on EPIC-Kitchens and HAC benchmarks demonstrate average improvements of approximately 5% over standard fusion and approximately 2% over state-of-the-art methods.
+Action anticipation predicts future actions from partially observed videos. Because observations are limited, it requires inferring hidden intentions, leading to two uncertainties: (1) \textit{observation-level uncertainty} from partial or noisy visual evidence, and (2) \textit{intention-level uncertainty} because the same observation can imply multiple plausible future intentions. Prior work largely models only observation-level uncertainty, limiting long-horizon anticipation where unobserved, evolving intentions drive behavior.
+We introduce \textsc{IntenDiff}, a hierarchical diffusion framework that explicitly models intention-level uncertainty via \textbf{sub-intentions}: temporally evolving short-term intentions that bridge the video’s \textit{global intention} and future actions. (1) Sub-Intention Diffusion starts from the global intention and stochastically samples sub-intention embeddings over time in a label-free manner. We ground these embeddings in language by co-fine-tuning with a vision--language model (VLM) using a contrastive alignment loss, producing multiple, linguistically coherent hypotheses beyond the visible frames. (2) Action Diffusion generates actions conditioned on sampled sub-intentions via uncertainty-aware conditioning, adaptively assigning higher weight to time segments where sub-intentions remain aligned with the global intention. By jointly capturing intention-level and observation-level uncertainty, \textsc{IntenDiff} yields intention-consistent and robust long-horizon predictions under partial observability. Empirically, \textsc{IntenDiff} achieves consistent gains across six benchmarks, advancing the state-of-the-art.
 
 
 ## Folder structure
