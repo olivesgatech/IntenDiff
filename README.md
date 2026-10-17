@@ -9,11 +9,13 @@ causdiff-main/
 │   ├── main*.py             #   entry points (called from scripts/prob, scripts/determ)
 │   ├── trainers*.py, models*.py, bit_diffusion*.py, batch_gen*.py, qwen*.py ...
 │   ├── analysis/            #   uncertainty / attention / AUUC analysis scripts
+│   ├── tools/               #   standalone utilities (qwen sub-intention extractor, npy/spectrum tools)
 │   └── llm_as_a_judge/      #   VLM-as-a-judge evaluation scripts
 ├── scripts/
 │   ├── prob/                # train/predict configs (probabilistic models)
 │   ├── determ/              # train/predict configs (deterministic models)
 │   └── slurm/               # sbatch launchers (run*.sh, test*.sh)
+├── archive/src/             # unused experiment variants (see archive/README.md)
 ├── datasets/                # mappings, splits, ground truth, preprocessing scripts
 │   └── darai/gt_sub_intention/   # GT sub-intentions (from llm_as_a_judge/parse_gt_sub_intention.py)
 ├── logs/                    # (local only, gitignored) slurm-*.out logs + INDEX.md
