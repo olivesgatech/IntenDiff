@@ -33,6 +33,6 @@ OPTS="--model_dir=/home/hice1/skim3513/AIFirst_F24_data/darai/models/causdiff\
       --frames_root=/home/hice1/skim3513/AIFirst_F24_data/darai/models/causdiff/breakfast_png \
       --sample_rate=3"
 
-python ./src/main-causal_hierarchical_onlylora_7b_breakfast.py $OPTS
+python ./src/main_causal_hierarchical.py --variant=onlylora_7b --dataset=breakfast $OPTS
 
 

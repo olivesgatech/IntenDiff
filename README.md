@@ -6,7 +6,8 @@ Intent Makes the Difference: Intention Diffusion for Action Anticipation (WACV 2
 ```
 causdiff-main/
 ├── src/                     # All Python code (flat imports — keep files at this level)
-│   ├── main*.py             #   entry points (called from scripts/prob, scripts/determ)
+│   ├── main_causal_hierarchical.py  # IntenDiff entry point (--variant, --dataset)
+│   ├── main.py, main-causal.py      # older baselines
 │   ├── trainers*.py, models*.py, bit_diffusion*.py, batch_gen*.py, qwen*.py ...
 │   ├── analysis/            #   uncertainty / attention / AUUC analysis scripts
 │   ├── tools/               #   standalone utilities (qwen sub-intention extractor, npy/spectrum tools)
@@ -42,3 +43,20 @@ sbatch scripts/slurm/run-causal-hierarchical.sh
 
 New slurm logs go to `logs/slurm/slurm-<jobid>_<jobname>.out` automatically.
 After adding logs, regenerate `logs/slurm/INDEX.md` if you want the summary up to date.
+
+### Variants and datasets
+
+`src/main_causal_hierarchical.py` picks the trainer and data loader by flag:
+
+| `--variant` | trainer → VLM |
+|---|---|
+| `base` | `trainers_causal_hierarchical` → Qwen2-VL-7B online encoder |
+| `projector` | `trainers_causal_hierarchical_projector` → Qwen2-VL-7B + projector |
+| `onlylora` | `trainers_causal_hierarchical_onlylora` → Qwen2-VL-2B, LoRA |
+| `onlylora_7b` | `trainers_causal_hierarchical_onlylora_7b` → Qwen2-VL-7B, LoRA (`_onlyvlm`) |
+| `onlylora_25b` | `trainers_causal_hierarchical_onlylora_25b` → **Qwen2.5-VL-3B**, LoRA |
+| `onlylora_7b_nturgbd` | `trainers_causal_hierarchical_onlylora_7b_nturgbd` → Qwen2.5-VL-7B, LoRA |
+
+`--dataset`: `darai_l3`, `darai_l2`, `utkinects`, `nturgbd`, `breakfast`, `50salads`.
+`--num_samples` defaults to 1 for `base`/`projector` and 5 otherwise.
+`--ds` is unchanged and only affects the experiment directory name.

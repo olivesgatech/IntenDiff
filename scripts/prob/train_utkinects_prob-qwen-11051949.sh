@@ -32,6 +32,6 @@ OPTS="--model_dir=/home/hice1/skim3513/AIFirst_F24_data/darai/models/causdiff\
       --date=202511051949 \
       --sample_rate=1"
 
-python ./src/main-causal_hierarchical_onlylora_7b_utkinects.py $OPTS
+python ./src/main_causal_hierarchical.py --variant=onlylora_7b --dataset=utkinects $OPTS
 
 

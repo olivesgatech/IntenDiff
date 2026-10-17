@@ -32,6 +32,6 @@ OPTS="--model_dir=/home/hice1/skim3513/scratch/causdiff/model/darai/diff \
       --date=202508130829 \
       --sample_rate=3"
 
-python ./src/main-causal_hierarchical.py $OPTS
+python ./src/main_causal_hierarchical.py --variant=base --dataset=darai_l3 $OPTS
 
 
