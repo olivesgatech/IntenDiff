@@ -20,7 +20,7 @@
 </div>
 
 <div style="text-align:center">
-<img src="imgs/figure1 (6).pdf" width="95%" height="100%">
+<img src="imgs/figure1.pdf" width="95%" height="100%">
 </div>
 
 ---
