@@ -36,7 +36,9 @@ ACTIONS = ["Get_a_cup", "Get_coffee", "Pour_coffee_powder", "Add_water",
 GROUP = {0: "Making coffee", 1: "Making coffee", 2: "Making coffee", 3: "Making coffee",
          4: "Making a pancake", 5: "Cleaning dishes", 6: "Making a pancake"}
 # Fig. 1 colour coding: pink = making coffee, blue = making a pancake, yellow = cleaning dishes
-GROUP_COLORS = {"Making coffee": "#e87ba4", "Making a pancake": "#2a78d6", "Cleaning dishes": "#eda100"}
+GROUP_COLORS = {"Making coffee": "#e2689b", "Making a pancake": "#2a78d6", "Cleaning dishes": "#eda100"}
+# steps of "making coffee" get light -> dark pink shades, in task order (as in Fig. 1)
+ACTION_COLORS = {0: "#fde2ec", 1: "#f4a6c5", 2: "#e2689b", 3: "#bd3a70"}
 
 # (action id, end step) runs, read off Fig. 1(c)
 ROWS = {
@@ -106,7 +108,8 @@ def main():
         "action_names": {str(i): n for i, n in enumerate(ACTIONS)},
         "action_groups": {str(i): g for i, g in GROUP.items()},
         "group_colors": GROUP_COLORS,
-        "legend_title": "Colour = global intention the action belongs to",
+        "action_colors": {str(i): c for i, c in ACTION_COLORS.items()},
+        "legend_title": "Colour = global intention the action belongs to (light → dark pink: steps of making coffee)",
         "row_labels": list(ROWS),
         "captions": captions,
         "banner": "Illustration of Fig. 1 · not model output",

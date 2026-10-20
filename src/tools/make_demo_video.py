@@ -79,6 +79,19 @@ def color_map(gt, actions, names, ignore):
     return cmap, order
 
 
+def _lum(h):
+    c = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    c = [x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+
+def ink_on(fill):
+    """text colour for a label inside a filled segment: whichever of dark ink / white contrasts more"""
+    dark = (_lum(fill) + 0.05) / (_lum(TEXT) + 0.05)
+    light = 1.05 / (_lum(fill) + 0.05)
+    return TEXT if dark >= light else "#ffffff"
+
+
 def pretty(name):
     return name.replace("_", " ")
 
@@ -157,6 +170,8 @@ def main():
         order = list(dict.fromkeys(groups[str(int(a))] for seq in [gt] + list(rows) for a in seq))
         slot = {g: group_colors.get(g, SERIES[k % len(SERIES)]) for k, g in enumerate(order)}
         cmap = {int(a): slot[g] for a, g in groups.items()}
+        # optional shades within a group (e.g. light -> dark pink for the steps of "making coffee")
+        cmap.update({int(a): c for a, c in meta.get("action_colors", {}).items()})
     else:
         cmap, order = color_map(gt, rows, names, ignore=set())
 
@@ -230,7 +245,7 @@ def main():
             ax_tl.add_patch(Rectangle((a, y - 0.38), b - a, 0.76, fc=c, ec=SURFACE, lw=2))
             text = pretty(names.get(str(lab), "?"))
             if (b - a) / T * 1000 >= 9 * len(text) + 12:          # label only when it fits
-                ax_tl.text((a + b) / 2, y, text, ha="center", va="center", fontsize=10, color=TEXT, clip_on=True)
+                ax_tl.text((a + b) / 2, y, text, ha="center", va="center", fontsize=10, color=ink_on(c), clip_on=True)
     ax_tl.axvline(obs_len, color=TEXT, lw=2)
     ax_tl.text(obs_len / 2, y_max - 0.15, "← Partial observation →", ha="center", va="center", color=TEXT_2, fontsize=11)
     ax_tl.text((obs_len + T) / 2, y_max - 0.15, "← Anticipation →", ha="center", va="center", color=TEXT_2, fontsize=11)
@@ -274,7 +289,7 @@ def main():
         return []
 
     anim = animation.FuncAnimation(fig, draw, frames=n_frames, interval=1000 / args.fps, blit=False)
-    fills = list(cmap.values()) + [OTHER, INTENT_HUE, OBS_HUE]
+    fills = list(dict.fromkeys(list(cmap.values()) + (list(slot.values()) if groups else []) + [OTHER, INTENT_HUE, OBS_HUE]))
     covered = ["#%02x%02x%02x" % tuple(int(round(int(h[i:i + 2], 16) * 0.18 + int(SURFACE[i:i + 2], 16) * 0.82))
                                        for i in (1, 3, 5)) for h in fills]   # fills seen through the 0.82 cover
     ui = [SURFACE, TEXT, TEXT_2, MUTED, GRID, TRACK, "#ffffff"] + fills + covered
