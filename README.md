@@ -25,7 +25,7 @@
 
 <div style="text-align:center">
 <img src="imgs/intendiff-demo.gif" width="95%">
-<p><i>Animated version of Fig. 1: sub-intentions evolve with the observed frames, and IntenDiff's action samples stay within the global intention while GTDA's drift to other intentions (top right: GTDA vs. IntenDiff). Observation-level uncertainty and off-intention counts are computed from the samples shown; intention-level values are illustrative, not model outputs.</i></p>
+<p><i>Animated version of Fig. 1: sub-intentions evolve with the observed frames, and IntenDiff's action samples stay within the global intention while GTDA's drift to other intentions (top right: GTDA vs. IntenDiff). Uncertainty curves are illustrative (not model outputs); off-intention counts are computed from the samples shown.</i></p>
 </div>
 
 ---
@@ -111,7 +111,7 @@ Shared code: `bit_diffusion_common.py` (noise schedule, q-sampling, losses),
 
 ## Demo video
 
-The GIF above is built from Fig. 1 itself (illustrative uncertainty curves):
+The GIF above is built from Fig. 1 itself (illustrative uncertainty curves, set in `make_fig1_demo.py`):
 ```bash
 python src/tools/make_fig1_demo.py imgs/figure1.pdf /tmp/fig1_demo   # needs poppler's pdfimages
 python src/tools/make_demo_video.py /tmp/fig1_demo -o imgs/intendiff-demo.gif --fps 5 --hold 15

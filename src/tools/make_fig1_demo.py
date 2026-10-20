@@ -60,10 +60,12 @@ def runs_to_seq(runs):
     return seq
 
 
-def ramp(*knots):
-    """piecewise-linear curve through (step, value) knots"""
+def curve(*knots, wobble=0.02, phase=0.0):
+    """piecewise-linear curve through (step, value) knots plus a small deterministic wobble"""
     xs, ys = zip(*knots)
-    return np.interp(np.arange(T), xs, ys).round(3).tolist()
+    t = np.arange(T)
+    y = np.interp(t, xs, ys) + wobble * np.sin(0.9 * t + phase) * np.sin(0.23 * t + 1.3 * phase)
+    return np.clip(y, 0, 1).round(3).tolist()
 
 
 def load_raster(pdf_or_png):
@@ -112,20 +114,27 @@ def main():
         "legend_title": "Colour = global intention the action belongs to (light → dark pink: steps of making coffee)",
         "row_labels": list(ROWS),
         "captions": captions,
-        "banner": "Illustration of Fig. 1 · not model output",
-        # GTDA vs IntenDiff, using the sample rows above. Observation-level uncertainty is computed
-        # from those rows (entropy across each method's samples). Intention-level uncertainty (Eq. 2)
-        # needs sub-intentions, which GTDA does not have; IntenDiff's curve is hand-set to tell the
-        # figure's story (ambiguity shrinks over frames 1-3, grows moderately into the unseen future).
+        # GTDA vs IntenDiff. The uncertainty curves are hand-set to tell the figure's story (the README
+        # caption says so): each new frame (cup at t=9, coffee packet at t=18) adds evidence and drops
+        # uncertainty; it grows again into the unseen future, much more for GTDA's drifting samples.
+        # Intention-level uncertainty (Eq. 2) needs sub-intentions, which GTDA does not have.
+        # The off-intention counts are computed from the sample rows.
         "compare": {
             "methods": ["GTDA", "IntenDiff"],
             "rows": {"GTDA": [0, 1, 2], "IntenDiff": [3, 4, 5]},
             "colors": {"GTDA": "#8a8984", "IntenDiff": "#6250d6"},
-            "intention": {"IntenDiff": ramp((0, 0.62), (8, 0.56), (9, 0.50), (17, 0.40), (18, 0.32), (26, 0.24), (39, 0.42))},
+            "intention": {
+                "IntenDiff": curve((0, 0.58), (4, 0.66), (8, 0.64), (9, 0.50), (13, 0.47), (17, 0.42), (18, 0.33),
+                                   (22, 0.27), (26, 0.22), (27, 0.26), (33, 0.36), (39, 0.44)),
+            },
+            "observation": {
+                "GTDA": curve((0, 0.78), (8, 0.70), (9, 0.66), (17, 0.60), (18, 0.56), (26, 0.50), (27, 0.62),
+                              (32, 0.84), (39, 0.95), phase=1.0),
+                "IntenDiff": curve((0, 0.72), (8, 0.62), (9, 0.54), (17, 0.44), (18, 0.36), (26, 0.28), (27, 0.32),
+                                   (33, 0.42), (39, 0.50), phase=2.0),
+            },
             "missing_text": "not modeled (no sub-intentions)",
             "drift_group": "Making coffee",
-            "note": "intention: illustrative values • observation: entropy across the 3 samples below\n"
-                    "off-intention: the sampled action belongs to another global intention",
         },
     }
     with open(os.path.join(out, "meta.json"), "w") as f:

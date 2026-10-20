@@ -208,7 +208,8 @@ def main():
             ("Intention-level uncertainty",
              {m: (np.asarray(given[m], dtype=float)[:T] if m in given else None) for m in methods}),
             ("Observation-level uncertainty",
-             {m: observation_uncertainty(actions[cmp_cfg["rows"][m]]) for m in methods}),
+             {m: (np.asarray(cmp_cfg["observation"][m], dtype=float)[:T] if "observation" in cmp_cfg
+                  else observation_uncertainty(actions[cmp_cfg["rows"][m]])) for m in methods}),
         ]
         color_of = lambda k, m: cmp_cfg["colors"][m]
         raw_of = lambda k, m, ser: ser
