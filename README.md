@@ -41,7 +41,7 @@ We introduce \textsc{IntenDiff}, a hierarchical diffusion framework that explici
 ## Folder structure
 
 ```
-causdiff-main/
+IntenDiff/
 ├── src/                     # All Python code (flat imports — keep files at this level)
 │   ├── main_causal_hierarchical.py  # IntenDiff entry point (--variant, --dataset)
 │   ├── main.py, main-causal.py      # older baselines
