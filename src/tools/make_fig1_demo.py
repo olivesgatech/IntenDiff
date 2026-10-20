@@ -113,13 +113,20 @@ def main():
         "row_labels": list(ROWS),
         "captions": captions,
         "banner": "Illustration of Fig. 1 · not model output",
-        # hand-set curves: intention ambiguity shrinks as frames 1-3 reveal the goal and grows
-        # moderately into the unseen future; observation uncertainty falls with more evidence
-        "uncertainty": {
-            "intention": ramp((0, 0.62), (8, 0.56), (9, 0.50), (17, 0.40), (18, 0.32), (26, 0.24), (39, 0.42)),
-            "observation": ramp((0, 0.74), (8, 0.62), (17, 0.46), (26, 0.32), (27, 0.40), (39, 0.58)),
+        # GTDA vs IntenDiff, using the sample rows above. Observation-level uncertainty is computed
+        # from those rows (entropy across each method's samples). Intention-level uncertainty (Eq. 2)
+        # needs sub-intentions, which GTDA does not have; IntenDiff's curve is hand-set to tell the
+        # figure's story (ambiguity shrinks over frames 1-3, grows moderately into the unseen future).
+        "compare": {
+            "methods": ["GTDA", "IntenDiff"],
+            "rows": {"GTDA": [0, 1, 2], "IntenDiff": [3, 4, 5]},
+            "colors": {"GTDA": "#8a8984", "IntenDiff": "#6250d6"},
+            "intention": {"IntenDiff": ramp((0, 0.62), (8, 0.56), (9, 0.50), (17, 0.40), (18, 0.32), (26, 0.24), (39, 0.42))},
+            "missing_text": "not modeled (no sub-intentions)",
+            "drift_group": "Making coffee",
+            "note": "intention: illustrative values • observation: entropy across the 3 samples below\n"
+                    "off-intention: the sampled action belongs to another global intention",
         },
-        "uncertainty_note": "illustrative values for Fig. 1, not computed from model outputs",
     }
     with open(os.path.join(out, "meta.json"), "w") as f:
         json.dump(meta, f, indent=2)

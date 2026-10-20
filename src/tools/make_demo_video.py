@@ -116,7 +116,7 @@ class GifWriter(animation.AbstractMovieWriter):
         flat = [c for rgb3 in self.fixed for c in rgb3] + adaptive[:3 * (256 - len(self.fixed))]
         pal = Image.new("P", (1, 1))
         pal.putpalette(flat + [0] * (768 - len(flat)))
-        self.frames.append(rgb.quantize(palette=pal, dither=Image.Dither.FLOYDSTEINBERG))
+        self.frames.append(rgb.quantize(palette=pal, dither=Image.Dither.NONE))  # dithering speckles photos with UI colours
 
     def finish(self):
         ms = int(round(1000 / self.fps))
@@ -152,7 +152,9 @@ def main():
     T = int(valid.sum()) if valid.any() else T
     actions, gt = actions[:, :T], gt[:T]
 
-    if "uncertainty" in meta:                                  # precomputed curves
+    if "compare" in meta:                                      # per-method curves, built in the panel below
+        u_int = u_obs = np.zeros(T)
+    elif "uncertainty" in meta:                                # precomputed curves
         u_int = np.asarray(meta["uncertainty"]["intention"], dtype=float)[:T]
         u_obs = np.asarray(meta["uncertainty"]["observation"], dtype=float)[:T]
     else:
@@ -196,32 +198,80 @@ def main():
     cap = ax_vid.text(0.5, -0.03, "", transform=ax_vid.transAxes, ha="center", va="top", fontsize=12,
                       color=TEXT_2, style="italic", linespacing=1.3)
 
-    # uncertainty panel: two separate measures -> two bars + two sparklines (never one dual axis)
-    right = gs[0, 1].subgridspec(4, 1, height_ratios=[0.55, 1, 0.55, 1], hspace=0.55)
-    panels = []
-    for k, (label, hue, series, raw) in enumerate([
-            ("Intention-level uncertainty", INTENT_HUE, u_int_n, u_int),
-            ("Observation-level uncertainty", OBS_HUE, u_obs, u_obs)]):
+    # uncertainty panel: one block per measure (never a dual axis). With meta["compare"], each block
+    # has one bar per method and the observation-level curve is computed from that method's sample rows.
+    cmp_cfg = meta.get("compare")
+    if cmp_cfg:
+        methods = cmp_cfg["methods"]
+        given = cmp_cfg.get("intention", {})
+        blocks = [
+            ("Intention-level uncertainty",
+             {m: (np.asarray(given[m], dtype=float)[:T] if m in given else None) for m in methods}),
+            ("Observation-level uncertainty",
+             {m: observation_uncertainty(actions[cmp_cfg["rows"][m]]) for m in methods}),
+        ]
+        color_of = lambda k, m: cmp_cfg["colors"][m]
+        raw_of = lambda k, m, ser: ser
+    else:
+        methods = [""]
+        blocks = [("Intention-level uncertainty", {"": u_int_n}), ("Observation-level uncertainty", {"": u_obs})]
+        color_of = lambda k, m: [INTENT_HUE, OBS_HUE][k]
+        raw_of = lambda k, m, ser: [u_int, u_obs][k]
+    drift_group = cmp_cfg.get("drift_group") if cmp_cfg else None
+    n_m = len(methods)
+    ratios = []
+    for _ in blocks:
+        ratios += [0.35 + 0.3 * n_m, 0.7]
+    if drift_group:
+        ratios.append(0.45)
+    right = gs[0, 1].subgridspec(len(ratios), 1, height_ratios=ratios, hspace=0.6)
+    x0 = 0.2 if cmp_cfg else 0.0                               # room for method names
+    x1 = 0.86
+    bars, lines = [], []                                       # (fill, value text, series, raw)  /  (line, dot, series)
+    for k, (label, series_by_m) in enumerate(blocks):
         ax_bar = fig.add_subplot(right[2 * k])
         ax_bar.set_xlim(0, 1); ax_bar.set_ylim(0, 1); ax_bar.axis("off")
-        ax_bar.add_patch(Rectangle((0, 0.05), 1, 0.45, fc=TRACK, ec="none"))
-        fill = ax_bar.add_patch(Rectangle((0, 0.05), 0, 0.45, fc=hue, ec="none"))
-        ax_bar.text(0, 0.78, label, fontsize=12, color=TEXT, va="center")
-        val = ax_bar.text(1, 0.78, "", fontsize=12, color=TEXT_2, va="center", ha="right")
+        h = 1 / (1 + n_m)
+        ax_bar.text(0, 1 - h / 2, label, fontsize=12, color=TEXT, va="center")
         ax_sp = fig.add_subplot(right[2 * k + 1])
         ax_sp.set_xlim(0, T - 1); ax_sp.set_ylim(0, 1.08)
-        for s in ax_sp.spines.values():
-            s.set_visible(False)
+        for sp in ax_sp.spines.values():
+            sp.set_visible(False)
         ax_sp.tick_params(colors=MUTED, labelsize=9, length=0)
         ax_sp.set_yticks([0, 1]); ax_sp.set_xticks([])
         ax_sp.axhline(0, color=GRID, lw=1)
         ax_sp.axvline(obs_len - 0.5, color=MUTED, lw=1, ls=(0, (3, 3)))
-        line, = ax_sp.plot([], [], color=hue, lw=2, solid_capstyle="round")
-        dot, = ax_sp.plot([], [], "o", ms=8, color=hue, mec=SURFACE, mew=2)
-        panels.append((fill, val, line, dot, series, raw))
-    note = meta.get("uncertainty_note") or ("intention: Eq. 2, bar scaled to this video's max • observation: "
-                                            f"entropy across {actions.shape[0]} action samples")
+        for r, m in enumerate(methods):
+            yc = 1 - h * (r + 1.5)
+            if cmp_cfg:
+                ax_bar.text(x0 - 0.02, yc, m, fontsize=11, color=TEXT_2, va="center", ha="right")
+            ser = series_by_m[m]
+            if ser is None:
+                ax_bar.text(x0, yc, cmp_cfg.get("missing_text", "not modeled"), fontsize=10, color=MUTED,
+                            va="center", style="italic")
+                continue
+            hue = color_of(k, m)
+            ax_bar.add_patch(Rectangle((x0, yc - 0.28 * h), x1 - x0, 0.56 * h, fc=TRACK, ec="none"))
+            fill = ax_bar.add_patch(Rectangle((x0, yc - 0.28 * h), 0, 0.56 * h, fc=hue, ec="none"))
+            val = ax_bar.text(1, yc, "", fontsize=11, color=TEXT_2, va="center", ha="right")
+            bars.append((fill, val, ser, raw_of(k, m, ser), x1 - x0))
+            line, = ax_sp.plot([], [], color=hue, lw=2, solid_capstyle="round")
+            dot, = ax_sp.plot([], [], "o", ms=8, color=hue, mec=SURFACE, mew=2)
+            lines.append((line, dot, ser))
+    if cmp_cfg:
+        note = cmp_cfg.get("note", "")
+    else:
+        note = meta.get("uncertainty_note") or ("intention: Eq. 2, bar scaled to this video's max • observation: "
+                                                f"entropy across {actions.shape[0]} action samples")
     ax_sp.set_xlabel(note, fontsize=9, color=MUTED, loc="right", labelpad=4)
+    drift_txt = []
+    if drift_group:
+        ax_dr = fig.add_subplot(right[-1]); ax_dr.axis("off"); ax_dr.set_xlim(0, 1); ax_dr.set_ylim(0, 1)
+        ax_dr.text(0, 0.2, "Samples off-intention", fontsize=12, color=TEXT, va="center")
+        for r, m in enumerate(methods):
+            xm = 0.44 + 0.27 * r
+            ax_dr.add_patch(Rectangle((xm, 0.02), 0.022, 0.36, fc=cmp_cfg["colors"][m], ec="none"))
+            drift_txt.append((ax_dr.text(xm + 0.035, 0.2, "", fontsize=12, color=TEXT_2, va="center"), m))
 
     # action timelines (Fig. 1c style)
     labels = list(row_labels) if row_labels else [f"Sample {i + 1}" for i in range(S)]
@@ -279,17 +329,23 @@ def main():
         im.set_data(frame.astype(np.uint8))
         c = captions[t] if captions else None
         cap.set_text(textwrap.fill(f"Sub-intention: “{c}”", 70) if c else "")
-        for fill, val, line, dot, series, raw in panels:
-            fill.set_width(float(series[t]))
+        for fill, val, series, raw, width in bars:
+            fill.set_width(width * float(min(series[t], 1.0)))
             val.set_text(f"{raw[t]:.2f}")
+        for line, dot, series in lines:
             line.set_data(np.arange(t + 1), series[:t + 1])
             dot.set_data([t], [series[t]])
+        for txt, m in drift_txt:
+            idx = cmp_cfg["rows"][m]
+            out = sum(groups[str(int(actions[r, t]))] != drift_group for r in idx)
+            txt.set_text(f"{m}  {out}/{len(idx)}")
         cover.set_x(t + 1); cover.set_width(max(T - t - 1, 0))
         head.set_xdata([t + 0.5, t + 0.5])
         return []
 
     anim = animation.FuncAnimation(fig, draw, frames=n_frames, interval=1000 / args.fps, blit=False)
-    fills = list(dict.fromkeys(list(cmap.values()) + (list(slot.values()) if groups else []) + [OTHER, INTENT_HUE, OBS_HUE]))
+    fills = list(dict.fromkeys(list(cmap.values()) + (list(slot.values()) if groups else []) + [OTHER, INTENT_HUE, OBS_HUE]
+                               + (list(cmp_cfg["colors"].values()) if cmp_cfg else [])))
     covered = ["#%02x%02x%02x" % tuple(int(round(int(h[i:i + 2], 16) * 0.18 + int(SURFACE[i:i + 2], 16) * 0.82))
                                        for i in (1, 3, 5)) for h in fills]   # fills seen through the 0.82 cover
     ui = [SURFACE, TEXT, TEXT_2, MUTED, GRID, TRACK, "#ffffff"] + fills + covered
