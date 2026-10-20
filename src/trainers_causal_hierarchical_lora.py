@@ -455,6 +455,10 @@ class TrainerTCN:
                                 n_samples=args.num_samples,
                                 n_diffusion_steps=args.num_infr_diff_timesteps, index=itr, video_name=video_file_name,)
                         tcn_predictions = tcn_predictions.contiguous()
+                        if args.demo_dir and itr < args.demo_max:
+                            from demo_dump import dump_demo
+                            dump_demo(args.demo_dir, args, self.ema_diffusion.ema_model, tcn_predictions,
+                                      sample_batched, obs_perc, actions_dict)
                         
                         loss = 0.
                         ce_loss = 0.

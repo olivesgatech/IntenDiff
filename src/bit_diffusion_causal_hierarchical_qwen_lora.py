@@ -537,7 +537,29 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
                     t_prev=batched_times_prev,
                     batch=batch,index=index
                 )
+        self.last_goal_samples = goal_x_0_pred  # ((S B), T, 512) final sub-intentions, read by demo_dump
         return pred, init_noise
+
+    # ---------------------------------- DEMO (src/demo_dump.py) --------------------------------------
+
+    @torch.no_grad()
+    def aligned_subintentions(self, n_samples):
+        """Sub-intentions of the last predict() mapped to the VLM-aligned space: hat I = g_I(I) / ||g_I(I)||  -> (S, B, T, 512)."""
+        aligned = F.normalize(self.proj_diff(self.last_goal_samples), dim=-1)
+        return rearrange(aligned, "(s b) t d -> s b t d", s=n_samples)
+
+    @torch.no_grad()
+    def vlm_anchors(self, video_name, global_goal_texts):
+        """Semantic anchors mu = g_T(T) / ||g_T(T)|| from the VLM latents -> (B, T, 512). Leaves the global RNG untouched."""
+        was_training = self.qwen_enc.model.training
+        with torch.random.fork_rng(devices=[torch.cuda.current_device()] if torch.cuda.is_available() else []):
+            vlm_latents = self.qwen_enc(
+                images=video_name,
+                global_intention=global_goal_texts,
+                frame_indices=None, total_len=None, recent_subs_batch=None
+            )
+        self.qwen_enc.model.train(was_training)
+        return F.normalize(self.proj_vlm(vlm_latents.to(self.proj_vlm.weight.dtype)), dim=-1)
 
 
 

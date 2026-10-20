@@ -103,6 +103,24 @@ After adding logs, regenerate `logs/slurm/INDEX.md` if you want the summary up t
 Shared code: `bit_diffusion_common.py` (noise schedule, q-sampling, losses),
 `qwen_lora_encoder.py` (LoRA VLM encoder; prompts/resolution per preset), `goals.py`.
 
+
+## Demo video
+
+`src/tools/make_demo_video.py` renders a GIF/MP4 of one test video: the video plays with the
+intention-level (Eq. 2) and observation-level uncertainty bars evolving on the top right, and the
+sampled future actions (as in Fig. 1c) revealed below.
+
+1. Run any `lora_*` predict script with two extra flags (on the GPU node):
+   ```bash
+   python ./src/main_causal_hierarchical.py --variant=lora_qwen2vl_7b --dataset=darai_l3 $OPTS \
+       --demo_dir=./outputs/demo --demo_max=5
+   ```
+   Each saved video gets `outputs/demo/<video>_obs<rate>/` (frames, action samples, sub-intentions, VLM anchors).
+2. Render (CPU is fine):
+   ```bash
+   python src/tools/make_demo_video.py outputs/demo/<video>_obs0.3 -o imgs/demo.gif --mp4 imgs/demo.mp4
+   ```
+
 ---
 
 ## Citation

@@ -50,6 +50,9 @@ parser.add_argument('--model_dir')
 parser.add_argument('--results_dir')
 parser.add_argument('--load_type', default='numpy')
 parser.add_argument('--frames_root')
+parser.add_argument('--demo_dir', default=None,
+                    help='lora_* variants, --action=predict: save frames/samples/uncertainty inputs for src/tools/make_demo_video.py')
+parser.add_argument('--demo_max', default=3, type=int, help='number of test videos to save with --demo_dir')
 
 # run params
 parser.add_argument('--debug', action='store_true')
