@@ -25,7 +25,7 @@
 
 <div style="text-align:center">
 <img src="imgs/intendiff-demo.gif" width="95%">
-<p><i>Animated version of Fig. 1: sub-intentions evolve with the observed frames, and IntenDiff's action samples stay within the global intention while GTDA's drift to other intentions (top right: GTDA vs. IntenDiff). Uncertainty curves are illustrative (not model outputs); off-intention counts are computed from the samples shown.</i></p>
+<p><i>Animated version of Fig. 1: sub-intentions evolve with the observed frames, and IntenDiff's action samples stay within the global intention while GTDA's drift to other intentions (top right: GTDA vs. IntenDiff).</i></p>
 </div>
 
 ---
