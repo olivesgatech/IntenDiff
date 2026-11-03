@@ -262,6 +262,8 @@ class BatchGeneratorTCN(Dataset):
         
         classes_tensor_all = classes_tensor_all[perm_idx]
         classes_tensor_one_hot = classes_tensor_one_hot[perm_idx]
+        goals_tensor = goals_tensor[perm_idx]
+        goals_tensor_one_hot = goals_tensor_one_hot[perm_idx]
         
         mask_tensor = mask_tensor[perm_idx]
         mask_past_tensor = mask_past_tensor[perm_idx]

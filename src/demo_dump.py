@@ -26,7 +26,7 @@ def dump_demo(out_dir, args, diffusion, predictions, sample_batched, obs_perc, a
     mask_past = sample_batched[5][0, 0, :T]                          # (T,)
     gt = sample_batched[1][0, :T]                                    # (T,) action ids at the sample rate
     goal_one_hot = rearrange(sample_batched[10], 'b c t -> b t c')
-    goal_class = goal_one_hot[:, -1].argmax(dim=-1)                  # (1,)
+    goal_class = goal_one_hot[:, 0].argmax(dim=-1)                   # (1,)
     global_goal = goal_texts(args.goal_set, goal_class)
 
     actions = predictions.argmax(dim=2)[:, 0]                        # (S, T)

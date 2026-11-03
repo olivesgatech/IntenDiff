@@ -335,7 +335,6 @@
 #         goal_soft = frame_probs.mean(dim=1)
 #         goal_index = torch.argmax(goal_soft, dim=1)
 #         return logits.mean(dim=1), goal_index
-from turtle import st
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

@@ -1,4 +1,3 @@
-from turtle import st
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -44,9 +43,12 @@ class SinusoidalPositionalEncoding(nn.Module):
     
 
 class BitDiffPredictorTCN(nn.Module):
-    def __init__(self, args, num_classes, concat_channel, causal=False):
+    def __init__(self, args, num_classes, concat_channel, causal=False, causal_goal_attn=False):
         super(BitDiffPredictorTCN, self).__init__()
         self.num_classes = num_classes
+        # True: one goal token per time step, attended under a causal mask (Action Diffusion, Appendix 8)
+        # False: one time-pooled goal vector
+        self.causal_goal_attn = causal_goal_attn
         self.goal_embedding = nn.Linear(concat_channel - num_classes, 64) 
         self.ms_tcn = DiffMultiStageModel(
             args.layer_type,
@@ -69,7 +71,10 @@ class BitDiffPredictorTCN(nn.Module):
         
     def forward(self, x, t, stage_masks, obs_cond=None, self_cond=None, index=0):
         # arange
-        high_level_goal = self.goal_embedding(self_cond.mean(dim=1))
+        if self.causal_goal_attn:
+            high_level_goal = self.goal_embedding(self_cond)  # (B, T, 64)
+        else:
+            high_level_goal = self.goal_embedding(self_cond.mean(dim=1))  # (B, 64)
         
         x = rearrange(x, 'b t c -> b c t') # (16, 48, 2231)
         obs_cond = rearrange(obs_cond, 'b t c -> b c t') # features (16, 2048, 2231)
@@ -359,7 +364,7 @@ class CausalGoalAttention(nn.Module):
     def forward(self, x, goal_embed, index=0):
         """
         x: (B, C, T)
-        goal_embed: (B, C)
+        goal_embed: (B, C), or (B, T, C) for per-step goal tokens
         """
         B, C, T = x.shape
         x_seq = x.permute(0, 2, 1)  # (B, T, C)
@@ -369,9 +374,14 @@ class CausalGoalAttention(nn.Module):
         z_hat, _ = self.is_attn(h, h, h)  # (B, T, C)
         
 
-        # CS-ATT: attention from x to goal
-        x_hat_raw, cs_weights = self.cs_attn(goal_embed.unsqueeze(1), x_seq, x_seq)  # (B, 1, C)
-        x_hat = x_hat_raw.expand(-1, T, -1)
+        if goal_embed.dim() == 3:
+            # CS-ATT: x at step t attends to goal tokens 0..t only (causal mask)
+            causal = torch.triu(torch.ones(T, T, dtype=torch.bool, device=x.device), diagonal=1)
+            x_hat, cs_weights = self.cs_attn(h, goal_embed, goal_embed, attn_mask=causal)  # (B, T, C)
+        else:
+            # CS-ATT: attention from x to goal
+            x_hat_raw, cs_weights = self.cs_attn(goal_embed.unsqueeze(1), x_seq, x_seq)  # (B, 1, C)
+            x_hat = x_hat_raw.expand(-1, T, -1)
         #save_matrix_npy(np.asarray(cs_weights.detach().cpu()), index=index)
 
         if self.fusion == "sum":

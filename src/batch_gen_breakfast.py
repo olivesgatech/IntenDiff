@@ -38,11 +38,8 @@ class BatchGeneratorTCN(Dataset):
         # ---- NEW: frames root (breakfast_png) ----
         # expected structure:
         #   frames_root/P03/cam01/P03_cereals/00000.png ...
-        self.frames_root = getattr(
-            args,
-            "frames_root",
-            "/home/hice1/skim3513/AIFirst_F24_data/darai/models/causdiff/breakfast_png",
-        )
+        self.frames_root = getattr(args, "frames_root", None) or \
+            "/home/hice1/skim3513/AIFirst_F24_data/darai/models/causdiff/breakfast_png"
         self.qwen_max_side = getattr(args, "qwen_max_side", 336)
         self._img_cache = {}
         self._img_cache_cap = getattr(args, "img_cache_cap", 2048)
@@ -216,6 +213,11 @@ class BatchGeneratorTCN(Dataset):
         if len(seq_paths) > T:
             seq_paths = seq_paths[:T]
 
+        # VLM sees only observed frames; future time steps repeat the last observed frame
+        n_obs = max(1, int(mask_past.sum()))
+        seq_paths = seq_paths[:n_obs]
+        assert len(seq_paths) > 0, "no RGB frames found for the observed part"
+        seq_paths = seq_paths + [seq_paths[-1]] * (T - len(seq_paths))
         video_files = [self._load_resized_image(p, self.qwen_max_side) for p in seq_paths]
 
         sample = {

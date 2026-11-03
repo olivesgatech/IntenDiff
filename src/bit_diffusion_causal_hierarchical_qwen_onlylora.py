@@ -44,7 +44,7 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
             model_id="Qwen/Qwen2-VL-2B-Instruct",
             device="cuda",
             torch_dtype=torch.bfloat16,
-            cache_dir="/home/hice1/skim3513/scratch/causdiff/hf_cache",
+            cache_dir=None,  # HF default cache; set HF_HUB_CACHE to relocate
             lora_rank=8,
             lora_alpha=8,
             lora_dropout=0.05,
@@ -75,30 +75,22 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
 
     def _info_nce_timewise(self, q, k, mask=None, temperature=0.07):
         """
-        q, k: (B,T,D), 동일 시점끼리 positive, 배치 내 나머지는 negative
-        mask: (B,T) 0/1 유효 마스크
+        Eq. 5. q, k: (B,T,D). Within each video, q_l's positive is k_l and its negatives are k_u (u != l).
+        mask: (B,T) 0/1, padded steps are dropped as queries and as keys
         """
-        
         B,T,D = q.shape
-        
+
         q = F.normalize(q, dim=-1)
         k = F.normalize(k[:, :T, :], dim=-1)
 
-        qf = q.reshape(B*T, D)      # (N,D)
-        kf = k.reshape(B*T, D)      # (N,D)
-        logits = qf @ kf.t() / temperature   # (N,N)
-        targets = torch.arange(B*T, device=q.device)
+        logits = torch.bmm(q, k.transpose(1, 2)) / temperature   # (B,T,T)
+        targets = torch.arange(T, device=q.device).expand(B, T)
+        m = torch.ones(B, T, dtype=torch.bool, device=q.device) if mask is None else mask.bool()
+        logits = logits.masked_fill(~m[:, None, :], float("-inf"))
 
-        # if mask is not None:
-        #     m = mask.reshape(B*T).bool()
-        #     idx = torch.nonzero(m, as_tuple=False).squeeze(1)
-            
-        #     logits = logits[idx][:, idx]
-            
-        #     targets = torch.arange(idx.numel(), device=q.device)
-
-        loss = F.cross_entropy(logits, targets)
-        return loss
+        row_loss = F.cross_entropy(logits[m], targets[m], reduction="none")   # valid queries only
+        weight = (1.0 / m.sum(dim=1).clamp_min(1)).unsqueeze(1).expand(B, T)[m]   # 1/T per video
+        return (row_loss * weight).sum() / B
 
     
 
@@ -133,7 +125,7 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
 
         # sample: goal
         _, T, _ = gt_goal_one_hot.shape
-        global_goal_classes = gt_goal_one_hot[:,-1].argmax(dim=-1)  # (B,)
+        global_goal_classes = gt_goal_one_hot[:,0].argmax(dim=-1)  # (B,) first step: never padding
         global_goal_texts = goal_texts(self.goal_set, global_goal_classes)
 
 
@@ -200,7 +192,8 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
 
         valid = mask_all[-1].squeeze(-1).to(q_vlm.dtype)   # (B,T)
         temp = torch.exp(self.logit_scale).clamp(1/100.0, 100.0).detach()
-        nce  = self._info_nce_timewise(q_vlm, k_diff, mask=valid, temperature=float(1.0/temp))
+        # Eq. 5: sub-intention I_hat is the query, VLM anchors mu of the same video are the keys
+        nce  = self._info_nce_timewise(k_diff, q_vlm, mask=valid, temperature=float(1.0/temp))
 
 
         #goal_logits = model_out_goal.mean(dim=2, keepdim=True) # (S, B, 1, C)
@@ -282,7 +275,7 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
         #goal_t = gt_goal_one_hot#torch.randn((B, T, C)).to(pred_x_start_prev.device)  # e.g., (16, 1, 48) shaped random noise
         goal_t = goal_x
         _, T, _ = gt_goal_one_hot.shape
-        global_goal_classes = gt_goal_one_hot[:,-1].argmax(dim=-1)  # (B,)
+        global_goal_classes = gt_goal_one_hot[:,0].argmax(dim=-1)  # (B,) first step: never padding
         global_goal_texts = goal_texts(self.goal_set, global_goal_classes)
         
         ## CLIP tokenization

@@ -82,7 +82,7 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
             model_id="Qwen/Qwen2-VL-7B-Instruct",
             device="cuda",
             torch_dtype=torch.bfloat16,
-            cache_dir="/home/hice1/skim3513/scratch/causdiff/hf_cache",
+            cache_dir=None,  # HF default cache; set HF_HUB_CACHE to relocate
             lora_rank=4,
             lora_alpha=8,
             lora_dropout=0.05,
@@ -156,7 +156,7 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
 
         # sample: goal
         _, T, _ = gt_goal_one_hot.shape
-        global_goal_classes = gt_goal_one_hot[:,-1].argmax(dim=-1)  # (B,)
+        global_goal_classes = gt_goal_one_hot[:,0].argmax(dim=-1)  # (B,) first step: never padding
         global_goal_texts = goal_texts(self.goal_set, global_goal_classes)
 
 
@@ -301,7 +301,7 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
         #goal_t = gt_goal_one_hot#torch.randn((B, T, C)).to(pred_x_start_prev.device)  # e.g., (16, 1, 48) shaped random noise
         goal_t = goal_x
         _, T, _ = gt_goal_one_hot.shape
-        global_goal_classes = gt_goal_one_hot[:,-1].argmax(dim=-1)  # (B,)
+        global_goal_classes = gt_goal_one_hot[:,0].argmax(dim=-1)  # (B,) first step: never padding
         global_goal_texts = goal_texts(self.goal_set, global_goal_classes)
 
         ## CLIP tokenization

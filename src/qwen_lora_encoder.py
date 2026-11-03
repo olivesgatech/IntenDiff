@@ -24,14 +24,18 @@ except Exception:
     get_peft_model = None
 
 
+# Encoding prompt from the paper (Fig. 9), shared by every preset
+SYSTEM_TEXT = "Output a fine-grained intention based only on visible evidence."
+USER_TEXT = "Global intention: {gi}. Frame {t}/{total}. Do not repeat global intention. Respect temporal logic."
+
 PRESETS = {
     # was qwen_online_encoder_loraenable.py
     'qwen2vl': dict(
         model_cls="Qwen2VLForConditionalGeneration",
         backbone_cls="Qwen2VLModel",
         processor_kwargs={},
-        system_text="Output a fine-grained intention based only on visible evidence.",
-        user_text="Global intention: {gi}. Frame {t}/{total}. Do not repeat global intention. Respect temporal logic.",
+        system_text=SYSTEM_TEXT,
+        user_text=USER_TEXT,
         gen_system_text="Output a fine-grained intention (>=20 words) based only on visible evidence.",
         gen_max_new_tokens=120,
     ),
@@ -40,8 +44,8 @@ PRESETS = {
         model_cls="AutoModelForVision2Seq",
         backbone_cls="Qwen2VLModel",
         processor_kwargs=dict(min_pixels=224*224, max_pixels=576*576),
-        system_text="Output fine-grained intention based only on evidence from two consecutive images. 'Fine-grained' indicates next 1-5s sub-step",
-        user_text="Global goal: {gi}. Frame {t}/{total}. Output <=8 words. Do not repeat the Global goal.",
+        system_text=SYSTEM_TEXT,
+        user_text=USER_TEXT,
         gen_system_text="Output a fine-grained intention (<=8 words) based only on visible evidence.",
         gen_max_new_tokens=12,
     ),
@@ -50,8 +54,8 @@ PRESETS = {
         model_cls="AutoModelForVision2Seq",
         backbone_cls="Qwen2_5_VLModel",
         processor_kwargs=dict(min_pixels=224*224, max_pixels=1024*1024),
-        system_text="You are a intention tagger. Output fine-grained intention based only on evidence from the given image. Definition: fine-grained = next 1-5s sub-step",
-        user_text="Global intention: {gi}. Frame {t}/{total}. Do not repeat the Global intention.",
+        system_text=SYSTEM_TEXT,
+        user_text=USER_TEXT,
         gen_system_text="Output a fine-grained intention (>=20 words) based only on visible evidence.",
         gen_max_new_tokens=1200,
     ),
@@ -210,14 +214,19 @@ class QwenVLOnlineEncoder(nn.Module):
             for _, p in self.model.named_parameters():
                 p.requires_grad = False
             K = 6  # 마지막 6블록만
-            layers = getattr(self.model, "model", None)
-            layers = getattr(layers, "layers", None) or []
+            # PeftModel.model is the *ForConditionalGeneration wrapper (no .layers),
+            # so locate the decoder layers through the backbone instead.
+            layers = _find_layers_module(_get_qwen_backbone(self.model, self.cfg["backbone_cls"]))
+            assert layers is not None, "[QwenVLOnlineEncoder] could not find decoder layers to enable LoRA on"
             for li, blk in enumerate(layers):
                 enable = (li >= len(layers) - K)
                 for name, module in blk.named_modules():
                     if "lora_" in name:
                         for p in module.parameters():
                             p.requires_grad = enable
+            n_trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+            print(f"[QwenVLOnlineEncoder] trainable LoRA params: {n_trainable}")
+            assert n_trainable > 0, "[QwenVLOnlineEncoder] enable_lora=True but no LoRA params are trainable"
 
         # Freeze vision tower / projector if requested
         if not freeze_vision_tower:
@@ -246,10 +255,8 @@ class QwenVLOnlineEncoder(nn.Module):
         recent_k=0,
         use_autocast=True,
     ):
-        if self.finetune:
-            self.model.train()
-        else:
-            self.model.eval()
+        # LoRA dropout only while the parent module is training (off for the EMA copy / inference)
+        self.model.train(self.finetune and self.training)
         device = self.device
 
         B = len(images)

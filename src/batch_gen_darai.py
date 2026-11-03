@@ -8,9 +8,13 @@ import glob
 from PIL import Image
 
 
+# RGB frames root used when --frames_root is not given (original cluster path)
+DEFAULT_FRAMES_ROOT = "/home/hice1/skim3513/AIFirst_F24_data/darai/RGB_sd"
+
+
 def npy_to_jpg_path(
     npy_path: str,
-    out_root: str = "/home/hice1/skim3513/AIFirst_F24_data/darai/RGB_sd",
+    out_root: str = DEFAULT_FRAMES_ROOT,
     frame_idx: int = 0, file_length=0,   # 기본은 00000.jpg 로 생성
 ) -> str:
     """
@@ -72,6 +76,7 @@ class BatchGeneratorTCN(Dataset):
 
         self.features_path = args.features_path
         self.gt_path = args.gt_path
+        self.frames_root = getattr(args, "frames_root", None) or DEFAULT_FRAMES_ROOT
 
         # Annotations
         file_ptr = open(vid_list_file, "r")
@@ -86,7 +91,7 @@ class BatchGeneratorTCN(Dataset):
             while True:
                 gt_file = os.path.join(self.gt_path, f"{base_name}_{seq_idx}.txt")
                 feature_file = os.path.join(self.features_path, f"{base_name}_{seq_idx}.npy")
-                rgb_file = npy_to_jpg_path(feature_file)
+                rgb_file = npy_to_jpg_path(feature_file, out_root=self.frames_root)
                 
                 if os.path.exists(gt_file) and os.path.exists(feature_file) and os.path.exists(rgb_file):
                     with open(gt_file, 'r') as file_ptr:
@@ -107,6 +112,9 @@ class BatchGeneratorTCN(Dataset):
                         seq_idx += 1
                 else:
                     break
+        if len(self.list_of_examples) == 0:
+            raise RuntimeError(f"No usable videos from {vid_list_file}: a video needs its gt file under --gt_path, "
+                               f"features under --features_path and RGB frames under --frames_root ({self.frames_root})")
 
     # 파일명 정렬용
     def _natural_key(self, s: str):
@@ -300,7 +308,7 @@ class BatchGeneratorTCN(Dataset):
         content_past_future = content_past_future[::self.sample_rate]
 
         T = classes_one_hot.shape[1]
-        first_jpg_path = npy_to_jpg_path(features_name, file_length=obs_lim)  # 기존 그대로 사용
+        first_jpg_path = npy_to_jpg_path(features_name, out_root=self.frames_root, file_length=obs_lim)  # 기존 그대로 사용
         seq_paths = self._expand_first_path_to_sequence(first_jpg_path, frame_stride=self.sample_rate)
 
         if len(seq_paths) >= T:
@@ -314,6 +322,11 @@ class BatchGeneratorTCN(Dataset):
         #pair_paths = self._concat_pairs(seq_paths)
         #image_seq = [self._load_concat_pair(p1, p2, self.qwen_max_side) for (p1, p2) in pair_paths]
 
+        # VLM sees only observed frames; future time steps repeat the last observed frame
+        n_obs = max(1, int(mask_past.sum()))
+        seq_paths = seq_paths[:n_obs]
+        assert len(seq_paths) > 0, "no RGB frames found for the observed part"
+        seq_paths = seq_paths + [seq_paths[-1]] * (T - len(seq_paths))
         image_seq = [self._load_resized_image(p, self.qwen_max_side) for p in seq_paths]
 
         sample = {
@@ -399,6 +412,8 @@ class BatchGeneratorTCN(Dataset):
         
         classes_tensor_all = classes_tensor_all[perm_idx]
         classes_tensor_one_hot = classes_tensor_one_hot[perm_idx]
+        goals_tensor = goals_tensor[perm_idx]
+        goals_tensor_one_hot = goals_tensor_one_hot[perm_idx]
         
         mask_tensor = mask_tensor[perm_idx]
         mask_past_tensor = mask_past_tensor[perm_idx]

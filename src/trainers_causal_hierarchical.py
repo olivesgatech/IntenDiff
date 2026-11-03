@@ -84,16 +84,19 @@ class TrainerTCN:
         # MODEL
         if self.prob:
             self.diffusion = self.diffusion.to(device)
-            if 1:#args.num_epochs != 100:
-                self.diffusion.model.load_state_dict(torch.load(save_dir + '/epoch-' + str(args.epoch) + ".model"), strict=False)
-            else:
-                args.epoch = -1
-            self.diffusion.train()
-            
             self.ema_diffusion = EMA(model=self.diffusion,
                                     beta=0.995,
                                     update_every=10)
-            self.ema_diffusion.eval()
+            if args.resume:
+                # ema_diff_epoch-N holds the whole online diffusion (action + goal model, VLM, heads) and its EMA copy
+                ckpt = save_dir + "/ema_diff_epoch-" + str(args.epoch) + ".model"
+                missing, unexpected = self.ema_diffusion.load_state_dict(torch.load(ckpt, map_location=device), strict=False)
+                print(f"Resuming from {ckpt} (missing keys: {len(missing)}, unexpected keys: {len(unexpected)})")
+            else:
+                args.epoch = -1
+            # EMA registers the online model as a submodule, so only put the EMA copy in eval mode
+            self.ema_diffusion.ema_model.eval()
+            self.diffusion.train()
         else:
             self.model.to(device)
             self.model.train()
@@ -101,10 +104,18 @@ class TrainerTCN:
 
         # INIT OPTIMIZER & SCHEDULER
         if self.prob:
-            optimizer = optim.Adam(params=self.diffusion.parameters(), lr=args.lr)
+            optimizer = optim.AdamW(params=self.diffusion.parameters(), lr=args.lr)  # paper: AdamW, default weight decay
         else:
             optimizer = optim.Adam(params=list(self.model.parameters()), lr=args.lr)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=.5)
+        if self.prob and args.resume:
+            optim_ckpt = save_dir + "/optim_epoch-" + str(args.epoch) + ".pt"
+            if os.path.exists(optim_ckpt):
+                optim_state = torch.load(optim_ckpt, map_location=device)
+                optimizer.load_state_dict(optim_state["optimizer"])
+                scheduler.load_state_dict(optim_state["scheduler"])
+            else:
+                print(f"{optim_ckpt} not found: optimizer and LR scheduler start fresh")
 
 
         # TRAIN
@@ -183,6 +194,8 @@ class TrainerTCN:
                 torch.save(self.model.state_dict(), save_dir + "/epoch-" + str(epoch) + ".model")
                 if self.prob:
                     torch.save(self.ema_diffusion.state_dict(), save_dir + "/ema_diff_epoch-" + str(epoch) + ".model")
+                    torch.save({"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()},
+                               save_dir + "/optim_epoch-" + str(epoch) + ".pt")
  
                 if not self.prob:
                     obs_percs = [.2, .3,]

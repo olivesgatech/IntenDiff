@@ -18,11 +18,11 @@ from goals import goal_texts
 from qwen_lora_encoder import QwenVLOnlineEncoder
 
 
-# vlm -> encoder preset / checkpoint / LoRA rank / hidden size / alpha-gated goal fusion
+# vlm -> encoder preset / checkpoint / LoRA rank / hidden size
 VLM_CONFIGS = {
-    'qwen2vl_7b':  dict(preset='qwen2vl',  model_id="Qwen/Qwen2-VL-7B-Instruct",   lora_rank=4, hidden_dim=3584, alpha_gate=True),
-    'qwen25vl_3b': dict(preset='qwen25vl', model_id="Qwen/Qwen2.5-VL-3B-Instruct", lora_rank=8, hidden_dim=2048, alpha_gate=False),
-    'qwen25vl_7b': dict(preset='qwen25vl', model_id="Qwen/Qwen2.5-VL-7B-Instruct", lora_rank=8, hidden_dim=3584, alpha_gate=False),
+    'qwen2vl_7b':  dict(preset='qwen2vl',  model_id="Qwen/Qwen2-VL-7B-Instruct",   lora_rank=4, hidden_dim=3584),
+    'qwen25vl_3b': dict(preset='qwen25vl', model_id="Qwen/Qwen2.5-VL-3B-Instruct", lora_rank=8, hidden_dim=2048),
+    'qwen25vl_7b': dict(preset='qwen25vl', model_id="Qwen/Qwen2.5-VL-7B-Instruct", lora_rank=8, hidden_dim=3584),
 }
 
 
@@ -43,14 +43,15 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
         beta_schedule="cosine",
         vlm="qwen2vl_7b",
         goal_set="darai",
+        train_num_samples=1,
     ):
         
         super().__init__()
         self._init_diffusion(model, goalmodel, condition_x0, clip_model, num_classes, timesteps,
                              ddim_timesteps, betas, loss_type, objective, beta_schedule)
         self.goal_set = goal_set
+        self.train_num_samples = train_num_samples   # sub-intention samples per video during training
         vlm_cfg = VLM_CONFIGS[vlm]
-        self.alpha_gate = vlm_cfg["alpha_gate"]
         
 
         self.qwen_enc = QwenVLOnlineEncoder(
@@ -58,7 +59,7 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
             model_id=vlm_cfg["model_id"],
             device="cuda",
             torch_dtype=torch.bfloat16,
-            cache_dir="/home/hice1/skim3513/scratch/causdiff/hf_cache",
+            cache_dir=None,  # HF default cache; set HF_HUB_CACHE to relocate
             lora_rank=vlm_cfg["lora_rank"],
             lora_alpha=8,
             lora_dropout=0.05,
@@ -73,8 +74,21 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
         self.proj_diff = nn.Linear(512, 512, bias=False)
         self.logit_scale = nn.Parameter(torch.tensor(3.0))  # CLIP-style; exp(3)≈20
         self.lambda_contrast = 1#0.5
-        if self.alpha_gate:
-            self.alpha_logit = torch.nn.Parameter(torch.zeros(512))
+        # Eq. 6 anchoring strength gamma = sigmoid(gamma_logit) in [0, 1]
+        self.gamma_logit = nn.Parameter(torch.zeros(()))
+        # Alg. 1/2: MLP that aggregates the S conditioning tokens {m^(s)} into m_bar (DeepSets form, works for any S)
+        self.agg_phi = nn.Sequential(nn.Linear(512, 512), nn.GELU(), nn.Linear(512, 512))
+        self.agg_rho = nn.Sequential(nn.GELU(), nn.Linear(512, 512))
+
+    def _anchor_mix(self, mu, i_hat):
+        """Eq. 6: m = gamma * mu + (1 - gamma) * I_hat. mu, i_hat: (B,T,512), already normalised."""
+        gamma = torch.sigmoid(self.gamma_logit).to(i_hat.dtype)
+        return gamma * mu + (1.0 - gamma) * i_hat
+
+    def _aggregate(self, m, n_samples):
+        """m_bar = MLP({m^(s)}): ((S B), T, 512) -> (B, T, 512)"""
+        m = rearrange(m, "(s b) t d -> s b t d", s=n_samples)
+        return self.agg_rho(self.agg_phi(m).mean(dim=0))
     
     def _ensure_proj_heads(self, vlm_latents, diff_vecs, out_dim=512):
         # vlm_latents: (B,T,Dv)
@@ -90,30 +104,22 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
 
     def _info_nce_timewise(self, q, k, mask=None, temperature=0.07):
         """
-        q, k: (B,T,D), 동일 시점끼리 positive, 배치 내 나머지는 negative
-        mask: (B,T) 0/1 유효 마스크
+        Eq. 5. q, k: (B,T,D). Within each video, q_l's positive is k_l and its negatives are k_u (u != l).
+        mask: (B,T) 0/1, padded steps are dropped as queries and as keys
         """
-        
         B,T,D = q.shape
-        
+
         q = F.normalize(q, dim=-1)
         k = F.normalize(k[:, :T, :], dim=-1)
 
-        qf = q.reshape(B*T, D)      # (N,D)
-        kf = k.reshape(B*T, D)      # (N,D)
-        logits = qf @ kf.t() / temperature   # (N,N)
-        targets = torch.arange(B*T, device=q.device)
+        logits = torch.bmm(q, k.transpose(1, 2)) / temperature   # (B,T,T)
+        targets = torch.arange(T, device=q.device).expand(B, T)
+        m = torch.ones(B, T, dtype=torch.bool, device=q.device) if mask is None else mask.bool()
+        logits = logits.masked_fill(~m[:, None, :], float("-inf"))
 
-        # if mask is not None:
-        #     m = mask.reshape(B*T).bool()
-        #     idx = torch.nonzero(m, as_tuple=False).squeeze(1)
-            
-        #     logits = logits[idx][:, idx]
-            
-        #     targets = torch.arange(idx.numel(), device=q.device)
-
-        loss = F.cross_entropy(logits, targets)
-        return loss
+        row_loss = F.cross_entropy(logits[m], targets[m], reduction="none")   # valid queries only
+        weight = (1.0 / m.sum(dim=1).clamp_min(1)).unsqueeze(1).expand(B, T)[m]   # 1/T per video
+        return (row_loss * weight).sum() / B
 
     
 
@@ -149,7 +155,7 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
         # sample: goal
         B, T, _ = gt_goal_one_hot.shape
         
-        global_goal_classes = gt_goal_one_hot[:,-1].argmax(dim=-1)  # (B,)
+        global_goal_classes = gt_goal_one_hot[:,0].argmax(dim=-1)  # (B,) first step: never padding
         global_goal_texts = goal_texts(self.goal_set, global_goal_classes)
 
         # CLIP Tokenization
@@ -160,46 +166,50 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
 
         # 2. 확장 (time axis 맞추기)
         goal_start = goal_features.unsqueeze(1).expand(-1, T, -1)  # (B, T, D_clip)
-        
-        #goal_start = gt_goal_one_hot # (16, 1816, 10)
-        goal_noise = None
-        goal_noise = default(goal_noise, lambda: torch.randn_like(goal_start))
-        
-        goal_t = self.q_sample(x_start=goal_start, t=t, noise=goal_noise)
 
         # OBSERVATION CONDITIONING
         obs_cond = obs * mask_past
 
+        # Intention Diffusion draws K sub-intention samples per video (Alg. 1), stacked along the batch as (k b)
+        K = self.train_num_samples
+        rep_k = lambda z: repeat(z, "b ... -> (k b) ...", k=K)
+        goal_start_k = rep_k(goal_start)
+        goal_features_k = rep_k(goal_features)
+        t_k = rep_k(t)
+        mask_all_k = [rep_k(m) for m in mask_all]
+        obs_cond_k = rep_k(obs_cond)
+
+        goal_noise = torch.randn_like(goal_start_k)
+        goal_t = self.q_sample(x_start=goal_start_k, t=t_k, noise=goal_noise)
+
         # SELF-CONDITIONING
         #self_cond = torch.zeros_like(gt_goal_one_hot).to(gt_goal_one_hot.device)
-        self_cond = torch.zeros((gt_goal_one_hot.shape[0], gt_goal_one_hot.shape[1], 512), device=gt_goal_one_hot.device)#384
+        self_cond = torch.zeros((K * B, T, 512), device=gt_goal_one_hot.device)#384
         flag=False
         if torch.rand((1)) < 0.5 and self.condition_x0:
             flag = True
             with torch.no_grad():
                 _, infer_goal = self.goalmodel(
                     x=goal_t, 
-                    t=t, 
-                    stage_masks=mask_all,
-                    obs_cond=obs_cond, # frames
+                    t=t_k, 
+                    stage_masks=mask_all_k,
+                    obs_cond=obs_cond_k, # frames
                     self_cond=self_cond,
                 )
-                self_cond = self.attn(infer_goal[-1], goal_features) # (B, T, D)
+                self_cond = self.attn(infer_goal[-1], goal_features_k) # (KB, T, D)
                 #self_cond = infer_goal[-1].detach()
 
         # REVERSE STEP
         _, model_out_goal = self.goalmodel(
             x=goal_t,
-            t=t,
-            stage_masks=mask_all,
-            obs_cond=obs_cond,
+            t=t_k,
+            stage_masks=mask_all_k,
+            obs_cond=obs_cond_k,
             self_cond=self_cond,
-        )  # S x B x T x C
+        )  # S x KB x T x C
 
-        S, B, T, D = model_out_goal.shape
-
-        subgoal_seq = model_out_goal # (S x B x T x C)
-        goal_repeat = subgoal_seq[-1] # (B x T x C)
+        subgoal_seq = model_out_goal # (S x KB x T x C)
+        goal_repeat = subgoal_seq[-1] # (KB x T x C)
 
         vlm_latents = self.qwen_enc(
             images=images_paths_batch,
@@ -214,22 +224,23 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
         else:
             q_vlm = self.proj_vlm(vlm_latents.detach())                 # grad OFF
             k_diff = self.proj_diff(goal_repeat)      # grad ON
+        q_vlm = rep_k(q_vlm)   # anchors are shared by the K samples of a video
 
-        valid = mask_all[-1].squeeze(-1).to(q_vlm.dtype)   # (B,T)
+        valid = rep_k(mask_all[-1]).squeeze(-1).to(q_vlm.dtype)   # (KB,T)
         temp = torch.exp(self.logit_scale).clamp(1/100.0, 100.0).detach()
-        nce  = self._info_nce_timewise(q_vlm, k_diff, mask=valid, temperature=float(1.0/temp))
+        # Eq. 5: sub-intention I_hat is the query, VLM anchors mu of the same video are the keys
+        nce  = self._info_nce_timewise(k_diff, q_vlm, mask=valid, temperature=float(1.0/temp))
 
-
-        if self.alpha_gate:
-            alpha = torch.sigmoid(self.alpha_logit).view(1, 1, D).to(dtype=q_vlm.dtype, device=q_vlm.device)
-            goal_repeat = alpha * k_diff + (1.0 - alpha) * q_vlm
+        # Eq. 6: m = gamma * mu + (1 - gamma) * I_hat per sample, then m_bar = MLP({m^(s)}) conditions Action Diffusion
+        m = self._anchor_mix(F.normalize(q_vlm, dim=-1), F.normalize(k_diff, dim=-1))
+        goal_repeat = self._aggregate(m, K)   # (B,T,512)
 
         #goal_logits = model_out_goal.mean(dim=2, keepdim=True) # (S, B, 1, C)
         gt_goal_one_hot = gt_goal_one_hot[:, :1, :]
         # SELF-CONDITIONING
         if torch.rand((1)) < 0.5 and self.condition_x0:
             with torch.no_grad():
-                self_cond = torch.zeros((model_out_goal.shape[1], model_out_goal.shape[2], x_0.shape[2]+model_out_goal.shape[3]), device=model_out_goal.device)
+                self_cond = torch.zeros((B, T, x_0.shape[2]+goal_repeat.shape[2]), device=model_out_goal.device)
                 self_cond, _ = self.model(
                     x=x_t, 
                     t=t, 
@@ -274,7 +285,7 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
                 ### action diffusion: model_out (S x B x T x C)
                 loss_goal = self.semantic_consistency_loss(
                     subgoal_features=subgoal_seq,
-                    global_goal=goal_start
+                    global_goal=goal_start_k
                 )
                 #loss_goal = torch.sum(torch.mean(loss_goal * mask_all, dim=(2, 3)))
                 loss += loss_goal
@@ -289,7 +300,7 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
 
     # ---------------------------------- INFERENCE (DDIM) --------------------------------------
 
-    def model_predictions(self, x, pred_x_start_prev, goal_x, goal_pred_x_start_prev, t, obs, stage_masks, gt_goal=None, gt_goal_one_hot=None, index=0, video_file=None,):
+    def model_predictions(self, x, pred_x_start_prev, goal_x, goal_pred_x_start_prev, t, obs, stage_masks, gt_goal=None, gt_goal_one_hot=None, index=0, vlm_anchor=None, n_samples=1,):
         x_t = x
         B,T,C=gt_goal_one_hot.shape
         # Given x_t, reconsturct x_0
@@ -303,7 +314,7 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
         #goal_t = gt_goal_one_hot#torch.randn((B, T, C)).to(pred_x_start_prev.device)  # e.g., (16, 1, 48) shaped random noise
         goal_t = goal_x
         _, T, _ = gt_goal_one_hot.shape
-        global_goal_classes = gt_goal_one_hot[:,-1].argmax(dim=-1)  # (B,)
+        global_goal_classes = gt_goal_one_hot[:,0].argmax(dim=-1)  # (B,) first step: never padding
         global_goal_texts = goal_texts(self.goal_set, global_goal_classes)
         
         ## CLIP tokenization
@@ -321,12 +332,6 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
             obs_cond=obs,
             self_cond = self_cond_goal,index=index
         )
-        
-        # vlm_latents = self.qwen_enc(
-        #     images=video_file,
-        #     global_intention=global_goal_texts[0],
-        #     frame_indices=None, total_len=None, recent_subs_batch=None
-        # )
         
         # ################### npy save ###########################################
         # if t[0] == 0:
@@ -361,16 +366,11 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
 
         infer_goal = infer_goal[-1] # (25, 106, 512)
         
-        ###################################################################################
-        ###################################################################################
-        #vlm_latents = self.proj_vlm(vlm_latents)
-        #alpha = torch.sigmoid(self.alpha_logit).view(1, 1, 512).to(dtype=vlm_latents.dtype, device=vlm_latents.device)
-        #infer_goal = alpha * infer_goal + (1.0 - alpha) * vlm_latents.expand(25, -1, -1)
-        
-        ###################################################################################
-        ###################################################################################
-
-        self_cond = torch.cat([self_cond, infer_goal], dim=2)
+        # Alg. 2: m^(s) = gamma * mu + (1 - gamma) * I_hat^(s) (Eq. 6), m_bar = MLP({m^(s)}),
+        # and every action sample is conditioned on the same m_bar
+        m = self._anchor_mix(vlm_anchor, F.normalize(self.proj_diff(infer_goal), dim=-1))
+        m_bar = repeat(self._aggregate(m, n_samples), "b t d -> (s b) t d", s=n_samples)
+        self_cond = torch.cat([self_cond, m_bar], dim=2)
         
         # ##################################################################################
         
@@ -426,7 +426,7 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
                                        goal_pred_x_start_prev=goal_pred_x_start_prev,
                                        t=t,
                                        obs=batch['obs'] * batch['mask_past'],
-                                       stage_masks=batch['mask_all'], gt_goal=batch['goal'],gt_goal_one_hot=gt_goal_one_hot, index=index, video_file=batch["video_file"])
+                                       stage_masks=batch['mask_all'], gt_goal=batch['goal'],gt_goal_one_hot=gt_goal_one_hot, index=index, vlm_anchor=batch["vlm_anchor"], n_samples=batch["n_samples"])
         pred_x_start = preds.pred_x_start
         pred_noise = preds.pred_noise
 
@@ -584,6 +584,10 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
         mask_past = repeat(mask_past, "b t 1 -> (s b) t c", s=n_samples, c=obs.shape[-1])
         masks_stages = [repeat(mask.to(torch.bool), "b t c -> (s b) t c", s=n_samples) for mask in masks_stages]
         #goal = repeat(goal, "b c -> (s b) c", s=n_samples)
+        # VLM anchors mu depend only on the video, so compute them once and share them across samples and DDIM steps
+        global_goal_texts = goal_texts(self.goal_set, gt_goal_one_hot[:, 0].argmax(dim=-1))
+        vlm_anchor = self.vlm_anchors(video_name, global_goal_texts)   # (B, T, 512)
+        vlm_anchor = repeat(vlm_anchor, "b t d -> (s b) t d", s=n_samples)
         gt_goal_one_hot = repeat(gt_goal_one_hot, "b t c -> (s b) t c", s=n_samples)
         
         # Sample from the diffusion model
@@ -596,7 +600,8 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
                 "mask_all": masks_stages,
                 "goal": None,#goal,
                 "goal_one_hot":gt_goal_one_hot,
-                "video_file": video_name,
+                "vlm_anchor": vlm_anchor,
+                "n_samples": n_samples,
             },
             init_rand=None,
             n_diffusion_steps=n_diffusion_steps,index=index

@@ -21,7 +21,6 @@
 from typing import Optional, Tuple
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.cm import get_cmap
 from matplotlib.colors import Normalize
 from matplotlib.lines import Line2D
 
@@ -121,7 +120,7 @@ def plot_intentions_2d_GSA(
     z_act = Z[1+T:1+2*T]    # (T, 2)
 
     # Colormap for time indices (same color used for sub & action at same t)
-    cmap = get_cmap(cmap_name)
+    cmap = plt.get_cmap(cmap_name)
     norm = Normalize(vmin=0, vmax=max(T-1, 1))  # avoid div by zero
 
     # Prepare figure
@@ -229,7 +228,7 @@ def plot_intentions_2d_GS(
     #z_act = Z[1+T:1+2*T]    # (T, 2)
 
     # Colormap for time indices (same color used for sub & action at same t)
-    cmap = get_cmap(cmap_name)
+    cmap = plt.get_cmap(cmap_name)
     norm = Normalize(vmin=0, vmax=max(T-1, 1))  # avoid div by zero
 
     # Prepare figure

@@ -47,8 +47,8 @@ EGTEA_GOAL = {
 }
 
 # single-goal datasets: one text shared by the whole batch
-UTKINECTS_GOAL = "the intention is to do the daily action"
-NTURGBD_GOAL = "the intention is to do the daily action"
+UTKINECTS_GOAL = "a person is going to perform an activity"
+NTURGBD_GOAL = "a person is going to perform an activity"
 
 
 GOAL_SETS = {

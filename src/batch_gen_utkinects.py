@@ -177,6 +177,11 @@ class BatchGeneratorTCN(Dataset):
         assert len(content) == vid_len
         content_past_future = content_past_future[::self.sample_rate]
 
+        # VLM sees only observed frames; future time steps repeat the last observed frame
+        n_obs = max(1, int(mask_past.sum()))
+        seq_paths = seq_paths[:n_obs]
+        assert len(seq_paths) > 0, "no RGB frames found for the observed part"
+        seq_paths = seq_paths + [seq_paths[-1]] * (T - len(seq_paths))
         image_seq = [self._load_resized_image(p, self.qwen_max_side) for p in seq_paths]
 
 

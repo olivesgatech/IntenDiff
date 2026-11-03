@@ -22,6 +22,7 @@ OPTS="--model_dir=/home/hice1/skim3513/AIFirst_F24_data/darai/models/causdiff\
       --lr=0.0005 \
       --model=bit-diff-pred-tcn \
       --num_epochs=200 \
+      --resume \
       --epoch=110 \
       --num_stages=5 \
       --obs_stages=0 \

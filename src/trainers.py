@@ -407,8 +407,10 @@ class TrainerTCN:
 
             # ITERATE
             print("length: ", len(dataloader))
+            per_video_dir = './diff_results/darai/baseline'  # per-video GroundTruth,Recognized files
+            os.makedirs(per_video_dir, exist_ok=True)
             for itr, sample_batched in enumerate(dataloader):
-                with open(f'/home/hice1/skim3513/scratch/causdiff/diff_results/darai/baseline/result_{itr}.txt', "w") as f:
+                with open(f'{per_video_dir}/result_{itr}.txt', "w") as f:
                     f.write("GroundTruth,Recognized\n")  # heade
                     # print(itr, "##################")
                     # if itr % 100 != 0:

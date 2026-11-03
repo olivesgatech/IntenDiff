@@ -10,14 +10,14 @@ import torch
 from goals import GOAL_SETS, DATASET_GOAL_SET
 
 
-# --variant -> (trainer module, uses tensorboard writer, default --num_samples, GaussianBitDiffusion kwargs)
+# --variant -> (trainer module, uses tensorboard writer, default --num_samples (paper: 25), GaussianBitDiffusion kwargs)
 VARIANTS = {
-    'base':             ('trainers_causal_hierarchical',          True,  1, {}),
-    'projector':        ('trainers_causal_hierarchical',          True,  1, {'projector': True}),
-    'lora_qwen2vl_2b':  ('trainers_causal_hierarchical_onlylora', False, 5, {}),
-    'lora_qwen2vl_7b':  ('trainers_causal_hierarchical_lora',     False, 5, {'vlm': 'qwen2vl_7b'}),
-    'lora_qwen25vl_3b': ('trainers_causal_hierarchical_lora',     False, 5, {'vlm': 'qwen25vl_3b'}),
-    'lora_qwen25vl_7b': ('trainers_causal_hierarchical_lora',     False, 5, {'vlm': 'qwen25vl_7b'}),
+    'base':             ('trainers_causal_hierarchical',          True,  25, {}),
+    'projector':        ('trainers_causal_hierarchical',          True,  25, {'projector': True}),
+    'lora_qwen2vl_2b':  ('trainers_causal_hierarchical_onlylora', False, 25, {}),
+    'lora_qwen2vl_7b':  ('trainers_causal_hierarchical_lora',     False, 25, {'vlm': 'qwen2vl_7b'}),
+    'lora_qwen25vl_3b': ('trainers_causal_hierarchical_lora',     False, 25, {'vlm': 'qwen25vl_3b'}),
+    'lora_qwen25vl_7b': ('trainers_causal_hierarchical_lora',     False, 25, {'vlm': 'qwen25vl_7b'}),
 }
 
 # --dataset -> batch generator module (all expose BatchGeneratorTCN)
@@ -63,6 +63,8 @@ parser.add_argument('--action', default='train')
 parser.add_argument('--lr', default=0.0005, type=float)
 parser.add_argument('--bz', default=8, type=int)
 parser.add_argument('--num_epochs', default=100, type=int)
+parser.add_argument('--resume', action='store_true',
+                    help='--action=train: continue from ema_diff_epoch-{--epoch}.model in the model dir')
 
 # eval
 parser.add_argument('--epoch', default=85, type=int)
@@ -93,6 +95,8 @@ parser.add_argument('--channel_dropout_prob', default=0.4, type=float)
 
 # diffusion
 parser.add_argument('--num_samples', default=None, type=int)  # default depends on --variant
+parser.add_argument('--train_num_samples', default=1, type=int,
+                    help='lora_qwen2vl_7b / lora_qwen25vl_*: sub-intention samples per video during training')
 parser.add_argument('--num_infr_diff_timesteps', default=50, type=int)
 parser.add_argument('--num_diff_timesteps', default=1000, type=int)
 parser.add_argument('--conditioned_x0', action='store_true')
@@ -120,6 +124,8 @@ if args.num_samples is None:
 if args.goal_set is None:
     args.goal_set = DATASET_GOAL_SET[args.dataset]
 args.diffusion_kwargs = dict(diffusion_kwargs, goal_set=args.goal_set)
+if trainer_module == 'trainers_causal_hierarchical_lora':
+    args.diffusion_kwargs['train_num_samples'] = args.train_num_samples
 
 if args.variant == 'projector':
     os.environ["TOKENIZERS_PARALLELISM"] = "false"

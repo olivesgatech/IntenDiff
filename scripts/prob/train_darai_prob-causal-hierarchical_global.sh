@@ -22,6 +22,7 @@ OPTS="--model_dir=/home/seulgi/work/causdiff/model/darai/diff \
       --lr=0.0005 \
       --model=bit-diff-pred-tcn \
       --num_epochs=100 \
+      --resume \
       --epoch=55 \
       --num_stages=5 \
       --obs_stages=0 \
