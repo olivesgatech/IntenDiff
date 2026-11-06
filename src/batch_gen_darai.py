@@ -145,6 +145,17 @@ class BatchGeneratorTCN(Dataset):
         seq = all_paths[0::max(1, frame_stride)]
         return seq
 
+    def _sequence_frame_paths(self, gt_lines, features_name, frame_stride: int = 15) -> list:
+        """
+        RGB frames of this sequence, one per GT line (= one per feature row), sampled every frame_stride.
+        Unlike _expand_first_path_to_sequence, this starts at the sequence's own first frame, so the
+        _2, _3, ... sequences of a video are not paired with frames from the start of the video.
+        GT line: /any/root/RGB_sd/<activity>/camera_<c>_fps_<f>/<subj>_<sess>_<frame>.jpg, <L2>, <L3>
+        """
+        frame_dir = os.path.dirname(npy_to_jpg_path(features_name, out_root=self.frames_root))
+        names = [os.path.basename(line.split(',')[0].strip()) for line in gt_lines]
+        return [os.path.join(frame_dir, n) for n in names[::max(1, frame_stride)]]
+
     def _resize_max_side(self, img: Image.Image, max_side: int) -> Image.Image:
         w, h = img.size
         s = max(w, h)
@@ -242,6 +253,7 @@ class BatchGeneratorTCN(Dataset):
         file_length = features.shape[1]
         file_ptr = open(gt_name, "r")
         content = file_ptr.read().split("\n")[:-1]
+        gt_lines = content  # raw lines; the first column is the RGB frame of each time step
         vid_len = len(content)
         #content = [line.split(',')[1] for line in content]
         content = [line.split(',')[2] for line in content]
@@ -308,8 +320,7 @@ class BatchGeneratorTCN(Dataset):
         content_past_future = content_past_future[::self.sample_rate]
 
         T = classes_one_hot.shape[1]
-        first_jpg_path = npy_to_jpg_path(features_name, out_root=self.frames_root, file_length=obs_lim)  # 기존 그대로 사용
-        seq_paths = self._expand_first_path_to_sequence(first_jpg_path, frame_stride=self.sample_rate)
+        seq_paths = self._sequence_frame_paths(gt_lines, features_name, frame_stride=self.sample_rate)
 
         if len(seq_paths) >= T:
             seq_paths = seq_paths[:T]
