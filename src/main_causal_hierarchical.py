@@ -97,6 +97,11 @@ parser.add_argument('--channel_dropout_prob', default=0.4, type=float)
 parser.add_argument('--num_samples', default=None, type=int)  # default depends on --variant
 parser.add_argument('--train_num_samples', default=1, type=int,
                     help='lora_qwen2vl_7b / lora_qwen25vl_*: sub-intention samples per video during training')
+parser.add_argument('--vlm_grad_ckpt', default=True, action=argparse.BooleanOptionalAction,
+                    help='lora_qwen2vl_7b / lora_qwen25vl_*: gradient checkpointing in the VLM (--no-vlm_grad_ckpt to turn off)')
+parser.add_argument('--vlm_chunk_size', default=1, type=int,
+                    help='lora_qwen2vl_7b / lora_qwen25vl_*: frames per VLM forward (larger = faster, more memory; '
+                         'results do not depend on it)')
 parser.add_argument('--num_infr_diff_timesteps', default=50, type=int)
 parser.add_argument('--num_diff_timesteps', default=1000, type=int)
 parser.add_argument('--conditioned_x0', action='store_true')
@@ -126,6 +131,8 @@ if args.goal_set is None:
 args.diffusion_kwargs = dict(diffusion_kwargs, goal_set=args.goal_set)
 if trainer_module == 'trainers_causal_hierarchical_lora':
     args.diffusion_kwargs['train_num_samples'] = args.train_num_samples
+    args.diffusion_kwargs['vlm_grad_ckpt'] = args.vlm_grad_ckpt
+    args.diffusion_kwargs['vlm_chunk_size'] = args.vlm_chunk_size
 
 if args.variant == 'projector':
     os.environ["TOKENIZERS_PARALLELISM"] = "false"

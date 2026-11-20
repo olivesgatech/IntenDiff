@@ -171,12 +171,14 @@ class QwenVLOnlineEncoder(nn.Module):
         # Misc
         max_side: int = 336,
         enable_grad_ckpt: bool = False,
+        chunk_size: int = 16,             # frames per VLM forward in forward()
         attn_impl: Optional[str] = None,  # e.g., "flash_attention_2" if supported
     ):
         super().__init__()
         self.cfg = PRESETS[preset]
         self.device = device
         self.max_side = max_side
+        self.chunk_size = chunk_size
 
         self.processor = AutoProcessor.from_pretrained(
             model_id, trust_remote_code=True, cache_dir=cache_dir, **self.cfg["processor_kwargs"]
@@ -191,9 +193,11 @@ class QwenVLOnlineEncoder(nn.Module):
         model_cls = getattr(transformers, self.cfg["model_cls"])
         self.model = model_cls.from_pretrained(model_id, **load_kwargs)
 
-        # Optional: gradient checkpointing
+        # Optional: gradient checkpointing. Training keeps the graph of every time step's frame until backward,
+        # so without it activation memory grows with T (OOM on long videos, e.g. UTKinects at sample_rate 1).
+        # Non-reentrant: gradients still reach the LoRA weights although the frozen base model's inputs need no grad.
         if enable_grad_ckpt and hasattr(self.model, "gradient_checkpointing_enable"):
-            self.model.gradient_checkpointing_enable()
+            self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
 
         # Attach LoRA
         self.finetune = enable_lora
@@ -251,10 +255,11 @@ class QwenVLOnlineEncoder(nn.Module):
         total_len=None,
         recent_subs_batch=None,
         return_all_tokens=False,
-        chunk_size=16,
+        chunk_size=None,                # None: self.chunk_size
         recent_k=0,
         use_autocast=True,
     ):
+        chunk_size = chunk_size or self.chunk_size
         # LoRA dropout only while the parent module is training (off for the EMA copy / inference)
         self.model.train(self.finetune and self.training)
         device = self.device

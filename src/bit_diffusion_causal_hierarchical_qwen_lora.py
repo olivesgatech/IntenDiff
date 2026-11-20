@@ -44,6 +44,8 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
         vlm="qwen2vl_7b",
         goal_set="darai",
         train_num_samples=1,
+        vlm_grad_ckpt=True,     # gradient checkpointing on, as in the original final DARai run
+        vlm_chunk_size=1,       # frames per VLM forward: smallest peak memory, slowest (original final run: 4)
     ):
         
         super().__init__()
@@ -66,7 +68,9 @@ class GaussianBitDiffusion(GaussianBitDiffusionBase):
             target_modules=("q_proj","k_proj","v_proj","o_proj"),
             freeze_vision_tower=True,
             freeze_mm_projector=True,#False,
-            max_side=448
+            max_side=448,
+            enable_grad_ckpt=vlm_grad_ckpt,
+            chunk_size=vlm_chunk_size,
         )
 
         # === NEW: 프로젝션 헤드 & 로짓 스케일 (게으른 초기화) ===
